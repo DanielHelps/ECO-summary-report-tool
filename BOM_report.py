@@ -8,8 +8,6 @@ def main(username, password, ECO, pb, value_text, root):
     import os
     from datetime import datetime
 
-    # username = 'daniel.marom@kornit.com'
-    # password = 'Kornit@2023'
     auth = HTTPBasicAuth(username, password)
     # ECO = 'ECO-10028-23'
     check_assemblies = ['23','33','06']
