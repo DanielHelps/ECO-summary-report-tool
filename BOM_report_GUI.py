@@ -40,7 +40,7 @@ def load():
 root = tk.Tk()
 root.geometry('420x230')
 root.resizable(False, False)
-root.title('ECO summary report tool')
+root.title('ECO summary report tool V1.2')
 title_font = ("Helvetica", 16)
 regular_font = ("Helvetica", 12)
 root.columnconfigure(0, weight=1)
@@ -56,10 +56,11 @@ def BOM_report_creation(username, password, ECO_num):
     # username = 'daniel.marom@kornit.com'
     # password = 'Kornit@2023'
     # ECO_num = 'ECO-10029-23'
+
    
+
     if ECO_num.get() != "":
         try:
-
             response_code = BOM_report.main(username.get(),password.get(),ECO_num.get(), pb, value_label, root)
         except PermissionError:
             tkinter.messagebox.showerror("Permission error", "Permission error, please exit the open ECO report and try again")
@@ -67,7 +68,6 @@ def BOM_report_creation(username, password, ECO_num):
             tkinter.messagebox.showerror("ECO error", "Couldn't find ECO, please check ECO #")
         except ZeroDivisionError:
             tkinter.messagebox.showerror("ECO error", "0 items in ECO... Cannot create ECO report")
-            
         except Exception as e:
             tkinter.messagebox.showerror("Unkown error", e)
         else:

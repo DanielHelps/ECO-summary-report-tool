@@ -81,32 +81,46 @@ def main(username, password, ECO, pb, value_text, root):
         
         
 
-    def find_BOM_change(OLD_BOM, checked_list, added, removed, ECO_num):
+    def find_BOM_change(OLD_BOM, checked_list, added, removed, ECO_num, change_flag):
         OLD_BOM_ITEMS = requests.get(OLD_BOM,auth=auth, params={'limit':1000}).json()
         for item in checked_list:
             matched_old_bom = [v for i, v in enumerate(OLD_BOM_ITEMS['items']) if v['ComponentItemNumber'] == item[0] and v['ChangeNotice']==ECO_num]
-            change_in_bom = 0
-            if len(matched_old_bom)>1:
-                sorted_date_bom = sorted(matched_old_bom, key=lambda x: datetime.strptime(x['LastUpdateDateTime'][0:10], '%Y-%m-%d'))
-                old_qty = sorted_date_bom[0]['Quantity']
-                new_qty = sorted_date_bom[1]['Quantity']
-                change_in_bom = new_qty - old_qty
-            elif len(matched_old_bom)==1:
-                matched_old_bom = [v for i, v in enumerate(OLD_BOM_ITEMS['items']) if v['ComponentItemNumber'] == item[0]]
+            if change_flag == 'Added':
+                old_qty = 0
+                new_qty = matched_old_bom[0]['Quantity']
+            elif change_flag == 'Removed':
+                old_qty = matched_old_bom[0]['Quantity']
+                new_qty = 0
+            else:
+                change_in_bom = 0
                 if len(matched_old_bom)>1:
-                    matched_old_bom = sorted(matched_old_bom, key=lambda x: datetime.strptime(x['LastUpdateDateTime'][0:10], '%Y-%m-%d'))
-                    if matched_old_bom[1]['EndDateTime'] == None:
-                        old_qty = matched_old_bom[0]['Quantity']
-                        new_qty = matched_old_bom[1]['Quantity']
-                        change_in_bom = new_qty - old_qty
-                    else:
-                        old_qty = matched_old_bom[1]['Quantity']
-                        new_qty = matched_old_bom[0]['Quantity']
-                        change_in_bom = new_qty - old_qty
+                    sorted_date_bom = sorted(matched_old_bom, key=lambda x: datetime.strptime(x['LastUpdateDateTime'].split(".")[0], '%Y-%m-%dT%H:%M:%S'))
+                    old_qty = sorted_date_bom[0]['Quantity']
+                    new_qty = sorted_date_bom[1]['Quantity']
                 elif len(matched_old_bom)==1:
-                    old_qty = 0
-                    new_qty = matched_old_bom[0]['Quantity']
-                    change_in_bom= new_qty
+                    matched_old_bom = [v for i, v in enumerate(OLD_BOM_ITEMS['items']) if v['ComponentItemNumber'] == item[0]]
+                    if len(matched_old_bom)>1:
+                        matched_old_bom = sorted(matched_old_bom, key=lambda x: datetime.strptime(x['LastUpdateDateTime'].split(".")[0], '%Y-%m-%dT%H:%M:%S'))
+                        if matched_old_bom[1]['EndDateTime'] == None:
+                            old_qty = matched_old_bom[0]['Quantity']
+                            new_qty = matched_old_bom[1]['Quantity']
+                        else:
+                            old_qty = matched_old_bom[1]['Quantity']
+                            new_qty = matched_old_bom[0]['Quantity']
+                        # if matched_old_bom[0]['LastUpdateDateTime'].split(".")[0]==matched_old_bom[1]['LastUpdateDateTime'].split(".")[0]:
+                        #     if removed == []:
+                        #         old_qty = matched_old_bom[0]['Quantity']
+                        #         new_qty = 0
+                        #     else:
+                        #         old_qty = 0
+                        #         new_qty = matched_old_bom[0]['Quantity']
+
+
+                            
+                    elif len(matched_old_bom)==1:
+                        old_qty = 0
+                        new_qty = matched_old_bom[0]['Quantity']
+            change_in_bom = new_qty - old_qty
             a = item[0],abs(change_in_bom),old_qty,new_qty
             if change_in_bom>0:
                 added.append(a)
@@ -153,8 +167,8 @@ def main(username, password, ECO, pb, value_text, root):
 
                 for component in response_affected_structure_comps['items']:
                     
-                    if component['ChangeId'] != None:
-                        # print(component['ComponentItemNumber'])
+                    if component['ChangeNotice'] == ECO:
+                        print(component['ComponentItemNumber'])
                         if component['ACDTypeCode'] == 1:
                             added.append(tuple((component['ComponentItemNumber'], component['ComponentQuantity'])))
                         elif component['ACDTypeCode'] == 2:
@@ -169,14 +183,16 @@ def main(username, password, ECO, pb, value_text, root):
                 updated_in_end = remove_a_from_b(added,remove_a_from_b(removed,updated))
                 added_in_end = remove_a_from_b(removed, remove_a_from_b(updated,added))
 
-                if updated_in_end != []:
-                    added_in_end, removed_in_end = find_BOM_change(OLD_BOM, updated_in_end, added_in_end, removed_in_end, ECO)
-
+                
                 if added_in_end != []:
-                    added_in_end, removed_in_end = find_BOM_change(OLD_BOM, added_in_end, [], removed_in_end, ECO)
+                    added_in_end, removed_in_end = find_BOM_change(OLD_BOM, added_in_end, [], removed_in_end, ECO, 'Added')
 
                 if removed_in_end != []:
-                    added_in_end, removed_in_end = find_BOM_change(OLD_BOM, removed_in_end, added_in_end, [], ECO)
+                    added_in_end, removed_in_end = find_BOM_change(OLD_BOM, removed_in_end, added_in_end, [], ECO, 'Removed')
+
+                if updated_in_end != []:
+                    added_in_end, removed_in_end = find_BOM_change(OLD_BOM, updated_in_end, added_in_end, removed_in_end, ECO, 'Updated')
+
 
 
                 for item in removed_in_end:
