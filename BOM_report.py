@@ -10,7 +10,7 @@ def main(username, password, ECO, pb, value_text, root):
 
     auth = HTTPBasicAuth(username, password)
     # ECO = 'ECO-10028-23'
-    check_assemblies = ['23','33','06']
+    check_assemblies = ['23','24','33','06']
     params = {'q':'ChangeNotice='+ECO}
     # pb['value'] = 10
     # root.update()

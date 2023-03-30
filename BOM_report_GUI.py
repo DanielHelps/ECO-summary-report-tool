@@ -40,7 +40,8 @@ def load():
 root = tk.Tk()
 root.geometry('420x230')
 root.resizable(False, False)
-root.title('ECO summary report tool V1.2')
+version = 1.3
+root.title(f'ECO summary report tool V{version}')
 title_font = ("Helvetica", 16)
 regular_font = ("Helvetica", 12)
 root.columnconfigure(0, weight=1)
