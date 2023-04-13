@@ -10,6 +10,7 @@ import os
 from tkinter import StringVar
 from functools import partial   
 import sys
+from check_conflicts import create_conflict_report
 
 def resource_path(relative_path):
     try:
@@ -38,17 +39,16 @@ def load():
     password.set(config.get('password'))
 
 root = tk.Tk()
-root.geometry('420x230')
+root.geometry('420x280')
 root.resizable(False, False)
-version = 1.3
-root.title(f'ECO summary report tool V{version}')
+root.title('ECO summary report tool V2.0 beta')
 title_font = ("Helvetica", 16)
 regular_font = ("Helvetica", 12)
 root.columnconfigure(0, weight=1)
 root.columnconfigure(1, weight=1)
 root.iconbitmap(resource_path("icon.ico"))
 
-def BOM_report_creation(username, password, ECO_num):
+def Report_creation(username, password, ECO_num, report_code):
 
     # tkinter.messagebox.showerror("ERROR!", f'Username {username.get()}, Password {password.get()}, ECO # {ECO_num.get()}')
     
@@ -62,7 +62,10 @@ def BOM_report_creation(username, password, ECO_num):
 
     if ECO_num.get() != "":
         try:
-            response_code = BOM_report.main(username.get(),password.get(),ECO_num.get(), pb, value_label, root)
+            if report_code == 1:
+                response_code = BOM_report.main(username.get(),password.get(),ECO_num.get(), pb, value_label, root)
+            else:
+                response_code = create_conflict_report(username.get(),password.get(),ECO_num.get(), pb, value_label, root)
         except PermissionError:
             tkinter.messagebox.showerror("Permission error", "Permission error, please exit the open ECO report and try again")
         except IndexError:
@@ -123,15 +126,24 @@ pb.grid(row=3, column=0, columnspan=2, padx=10, pady=30, sticky=tk.W)
 value_label = tk.Label(root, text="0%")
 value_label.grid(row=3, column=1, padx=20, columnspan=2, sticky=tk.E)
 
-BOM_report_func = partial(BOM_report_creation, username, password, ECO_num)
+BOM_report_func = partial(Report_creation, username, password, ECO_num, 1)
+Conflict_report_func = partial(Report_creation, username, password, ECO_num, 2)
 
-create_Report_But = ttk.Button(root, text="Create report", command=BOM_report_func).grid(row=4, column=0, ipadx=20, ipady=10)  
+create_Report_But = ttk.Button(root, text="""    Create ECO
+summary report""", command=BOM_report_func).grid(row=4, column=0, ipadx=20, ipady=10)  
+
+create_Conflict_But = ttk.Button(root, text="""    Create ECO
+conflict report""", command=Conflict_report_func).grid(row=5, column=0, ipadx=20, pady=10)  
+
+# create_Report_But = ttk.Button(root, text="Create report", command=BOM_report_func).grid(row=4, column=0, ipadx=20, ipady=10)  
+
+# create_Report_But = ttk.Button(root, text="Create report", command=BOM_report_func).grid(row=4, column=0, ipadx=20, ipady=10)  
 
 exit_but = ttk.Button(root, text="Exit", command=save_nd_quit)
-exit_but.grid(row=4, column=1, ipadx=20, ipady=10)
+exit_but.grid(row=5, column=1, ipadx=20, ipady=10)
 
 def show(event=None): # handler
-    BOM_report_creation(username,password,ECO_num)
+    Report_creation(username,password,ECO_num)
 
 
 root.bind('<Return>', show)

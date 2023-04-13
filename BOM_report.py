@@ -10,17 +10,17 @@ def main(username, password, ECO, pb, value_text, root):
 
     auth = HTTPBasicAuth(username, password)
     # ECO = 'ECO-10028-23'
-    check_assemblies = ['23','24','33','06']
+    check_assemblies = ['23','33','06']
     params = {'q':'ChangeNotice='+ECO}
     # pb['value'] = 10
     # root.update()
-    response = requests.get('https://fa-evbp-saasfaprod1.fa.ocs.oraclecloud.com/fscmRestApi/resources/11.13.18.05/productChangeOrdersV2', auth=auth,params=params)
+    response = requests.get('https://fa-evbp-saasfaprod1.fa.ocs.oraclecloud.com/fscmRestApi/resources/11.13.18.05/productChangeOrdersV2', auth=auth,params=params,verify=False)
     if response.status_code == 401:
         return 401
     pb['value']=0
     response_json =  response.json()
     affected_object_link = response_json['items'][0]['links'][2]['href']
-    response_affected = requests.get(affected_object_link,auth=auth)
+    response_affected = requests.get(affected_object_link,auth=auth,verify=False)
     response_affected_json = response_affected.json()
     if os.path.isfile(f'{ECO}_Summary_report.xlsx'):
         os.remove(f'{ECO}_Summary_report.xlsx')
@@ -80,7 +80,7 @@ def main(username, password, ECO, pb, value_text, root):
         
 
     def find_BOM_change(OLD_BOM, checked_list, added, removed, ECO_num, change_flag):
-        OLD_BOM_ITEMS = requests.get(OLD_BOM,auth=auth, params={'limit':1000}).json()
+        OLD_BOM_ITEMS = requests.get(OLD_BOM,auth=auth, params={'limit':1000}, verify=False).json()
         for item in checked_list:
             matched_old_bom = [v for i, v in enumerate(OLD_BOM_ITEMS['items']) if v['ComponentItemNumber'] == item[0] and v['ChangeNotice']==ECO_num]
             if change_flag == 'Added':
@@ -155,9 +155,9 @@ def main(username, password, ECO, pb, value_text, root):
 
         if affected_item['ItemNumber'][0:2] in check_assemblies:
             affected_item_structure_link = affected_item['links'][6]['href']
-            response_affected_structure = requests.get(affected_item_structure_link,auth=auth).json()
+            response_affected_structure = requests.get(affected_item_structure_link,auth=auth,verify=False).json()
             if response_affected_structure['items'] != []:
-                response_affected_structure_comps = requests.get(response_affected_structure['items'][0]['links'][3]['href'],auth=auth,params={'limit':1000}).json()
+                response_affected_structure_comps = requests.get(response_affected_structure['items'][0]['links'][3]['href'],auth=auth,params={'limit':1000},verify=False).json()
                 OLD_BOM = f"https://fa-evbp-saasfaprod1.fa.ocs.oraclecloud.com:443/fscmRestApi/resources/11.13.18.05/itemStructures/{response_affected_structure_comps['items'][0]['BillSequenceId']}/child/Component"
                 added = []
                 removed = []
