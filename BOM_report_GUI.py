@@ -11,6 +11,8 @@ from tkinter import StringVar
 from functools import partial   
 import sys
 from check_conflicts import create_conflict_report
+import urllib3
+import keyring
 
 def resource_path(relative_path):
     try:
@@ -21,27 +23,45 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 def save_nd_quit():
+    # config = {
+    #     'username': username.get(),
+    #     'password': password.get(),
+    # }
+
+    # with open("saved_settings.dat", "wb") as pickle_file:
+    #     pickle.dump(config, pickle_file, pickle.HIGHEST_PROTOCOL)
+
     config = {
         'username': username.get(),
-        'password': password.get(),
     }
+    if not os.path.exists(os.path.expanduser('~\\AppData\\Local\\BOM_report')):
+        os.makedirs(os.path.expanduser('~\\AppData\\Local\\BOM_report'))
 
-    with open("saved_settings.dat", "wb") as pickle_file:
+    with open(os.path.expanduser('~\\AppData\\Local\\BOM_report\\saved_settings.dat'), "wb") as pickle_file:
         pickle.dump(config, pickle_file, pickle.HIGHEST_PROTOCOL)
+
+    keyring.set_password("BOM_report", username.get(), password.get())
     root.quit()
     
 
 def load():
-    with open("saved_settings.dat", "rb") as pickle_file:
-        config = pickle.load(pickle_file)
+    if os.path.exists(os.path.expanduser('~\\AppData\\Local\\BOM_report\\saved_settings.dat')):
+        with open(os.path.expanduser('~\\AppData\\Local\\BOM_report\\saved_settings.dat'), "rb") as pickle_file:
+            config = pickle.load(pickle_file)
 
-    username.set(config.get('username'))
-    password.set(config.get('password'))
+        username.set(config.get('username'))
+        # password.set(config.get('password'))
 
+        password.set(keyring.get_password("BOM_report",config.get('username')))
+
+    
+
+
+urllib3.disable_warnings()
 root = tk.Tk()
 root.geometry('420x280')
 root.resizable(False, False)
-root.title('ECO summary report tool V2.0 beta')
+root.title('ECO summary report tool V2.1')
 title_font = ("Helvetica", 16)
 regular_font = ("Helvetica", 12)
 root.columnconfigure(0, weight=1)
@@ -50,15 +70,6 @@ root.iconbitmap(resource_path("icon.ico"))
 
 def Report_creation(username, password, ECO_num, report_code):
 
-    # tkinter.messagebox.showerror("ERROR!", f'Username {username.get()}, Password {password.get()}, ECO # {ECO_num.get()}')
-    
-    # BOM_report.main(username.get(),password.get(),ECO_num.get())
-
-    # username = 'daniel.marom@kornit.com'
-    # password = 'Kornit@2023'
-    # ECO_num = 'ECO-10029-23'
-
-   
 
     if ECO_num.get() != "":
         try:

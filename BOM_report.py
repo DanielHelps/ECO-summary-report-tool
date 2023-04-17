@@ -7,6 +7,7 @@ def main(username, password, ECO, pb, value_text, root):
     import copy
     import os
     from datetime import datetime
+    import pandas as pd
 
     auth = HTTPBasicAuth(username, password)
     # ECO = 'ECO-10028-23'
@@ -20,7 +21,7 @@ def main(username, password, ECO, pb, value_text, root):
     pb['value']=0
     response_json =  response.json()
     affected_object_link = response_json['items'][0]['links'][2]['href']
-    response_affected = requests.get(affected_object_link,auth=auth,verify=False)
+    response_affected = requests.get(affected_object_link,auth=auth,verify=False, params={'limit':1000})
     response_affected_json = response_affected.json()
     if os.path.isfile(f'{ECO}_Summary_report.xlsx'):
         os.remove(f'{ECO}_Summary_report.xlsx')
@@ -53,7 +54,7 @@ def main(username, password, ECO, pb, value_text, root):
     worksheet.write(4,5, 'New qty',bold)
     worksheet.write(4,6, 'Qty change',bold)
     worksheet.write(4,7, 'Change type',bold)
-
+        
 
     def remove_a_from_b(a, b):
         a_copy = copy.deepcopy(a)
@@ -75,7 +76,64 @@ def main(username, password, ECO, pb, value_text, root):
         worksheet.write(i,6,qty_change, color)
         worksheet.write(i,7,change, color)
         
-            
+    def sort_report(file_name):
+        df = pd.read_excel(file_name,skiprows=4)
+        df.sort_values(by=['Item P/N','Change type','Changed Component'],ascending=[True,False,True],na_position='first', inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        os.remove(file_name)
+        workbook = xlsxwriter.Workbook(file_name)
+        worksheet = workbook.add_worksheet()
+        worksheet.set_column(0, 0, 27.43)
+        worksheet.set_column(1, 1, 7.14)
+        worksheet.set_column(2, 2, 8.14)
+        worksheet.set_column(3, 3, 19.14)
+        worksheet.set_column(5, 5, 7.71)
+        worksheet.set_column(6, 6, 10.14)
+        worksheet.set_column(7, 7, 11.29)
+        
+
+        bold = workbook.add_format({'bold': True})
+        blue = workbook.add_format({'font_color':'blue'})
+        purple = workbook.add_format({'font_color':'purple'})
+        red = workbook.add_format({'font_color':'red'})
+        green = workbook.add_format({'font_color':'green'})
+
+        worksheet.write(0,0, f'{ECO} summary report',bold)
+        worksheet.write(1,0, f"ECO name: {response_json['items'][0]['ChangeName']}",bold)
+        worksheet.write(2,0, f"ECO description: {response_json['items'][0]['Description']}",bold)
+        
+        worksheet.write(4,0, 'Item P/N',bold)
+        worksheet.write(4,1, 'Old Rev',bold)
+        worksheet.write(4,2, 'New Rev',bold)
+        worksheet.write(4,3, 'Changed Component',bold)
+        worksheet.write(4,4, 'Old qty',bold)
+        worksheet.write(4,5, 'New qty',bold)
+        worksheet.write(4,6, 'Qty change',bold)
+        worksheet.write(4,7, 'Change type',bold)
+        
+
+        for item_number in range(len(df['Item P/N'])):
+            if pd.isnull(df['Change type'][item_number]):
+                worksheet.write(item_number+5,0,df['Item P/N'][item_number],blue)
+                worksheet.write(item_number+5,1,df['Old Rev'][item_number],blue)
+                worksheet.write(item_number+5,2,df['New Rev'][item_number],blue)
+            else:
+                if df['Change type'][item_number] == 'Added':
+                    color = green
+                else:
+                    color = red
+                worksheet.write(item_number+5,0,df['Item P/N'][item_number],purple)
+                worksheet.write(item_number+5,1,df['Old Rev'][item_number],purple)
+                worksheet.write(item_number+5,2,df['New Rev'][item_number],purple)
+                worksheet.write(item_number+5,3,df['Changed Component'][item_number],color)
+                worksheet.write(item_number+5,4,df['Old qty'][item_number],color)
+                worksheet.write(item_number+5,5,df['New qty'][item_number],color)
+                worksheet.write(item_number+5,6,df['Qty change'][item_number],color)
+                worksheet.write(item_number+5,7,df['Change type'][item_number],color)
+        workbook.close()
+
+
+
         
         
 
@@ -143,11 +201,13 @@ def main(username, password, ECO, pb, value_text, root):
         return added, removed
             
     i = 5
+    
     num_of_items = len(response_affected_json['items'])
     progress_value = 100/num_of_items
     for affected_item in response_affected_json['items']:
         
         print(f"Item {affected_item['ItemNumber']}, changes from Rev {affected_item['OldRevision']} to Rev {affected_item['NewItemRevision']}")
+        # report_items.append(tuple((affected_item['ItemNumber'],affected_item['OldRevision'],affected_item['NewItemRevision'],'blue')))
         worksheet.write(i,0,affected_item['ItemNumber'], blue)
         worksheet.write(i,1,affected_item['OldRevision'], blue)
         worksheet.write(i,2,affected_item['NewItemRevision'], blue)
@@ -195,6 +255,7 @@ def main(username, password, ECO, pb, value_text, root):
 
                 for item in removed_in_end:
                     if len(item) == 4:
+                        
                         add_comp_to_report(item[0],item[1],item[2],item[3],'Removed',affected_item,i)
                     else:
                         add_comp_to_report(item[0],item[1],"","",'Removed',affected_item,i)
@@ -220,9 +281,9 @@ def main(username, password, ECO, pb, value_text, root):
         pb['value'] += progress_value
         value_text['text'] = f"{round(pb['value'], 2)}%"
         root.update()
-    
-        
     workbook.close()
+    sort_report(f'{ECO}_Summary_report.xlsx')
+    
     return f'{ECO}_Summary_report.xlsx'
 
 if __name__ == "__main__":

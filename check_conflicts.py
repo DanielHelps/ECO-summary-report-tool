@@ -14,9 +14,9 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
         non_production_items = []
         request_link = "https://fa-evbp-saasfaprod1.fa.ocs.oraclecloud.com/fscmRestApi/resources/11.13.18.05/itemsLOV"
         if parents_flag == 0:
-            lifecycle_params = {'q':'ItemNumber='+' or '.join(items_list)}
+            lifecycle_params = {'q':'ItemNumber='+' or '.join(items_list), 'limit':1000}
         else:
-            lifecycle_params = {'q':'ItemNumber='+' or '.join(set([x[1] for x in items_list if x[1] != None]))}
+            lifecycle_params = {'q':'ItemNumber='+' or '.join(set([x[1] for x in items_list if x[1] != None])),'limit':1000}
         items_LOVs = requests.get(request_link,params=lifecycle_params,auth=auth, verify=False)
         items_LOVs = items_LOVs.json()
         for item in items_LOVs['items']:
@@ -73,7 +73,8 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
             os.remove(f'{ECO}_Summary_report.xlsx')
     workbook = xlsxwriter.Workbook(f'{ECO}_Conflict_report.xlsx')
     worksheet = workbook.add_worksheet()
-    worksheet.set_column(0, 0, 64.14)
+    worksheet.set_column(0, 0, 73.29)
+    worksheet.set_column(1, 1, 15)
     # worksheet.set_column(1, 1, 7.14)
     # worksheet.set_column(2, 2, 8.14)
     # worksheet.set_column(3, 3, 19.14)
@@ -93,6 +94,7 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
     # worksheet.write(2,0, f"ECO description: {response_json['items'][0]['Description']}",bold)
 
     worksheet.write(2,0, 'Conflict',bold)
+    worksheet.write(2,1, 'Problematic P/N',bold)
     # worksheet.write(2,1, 'Old Rev',bold)
     # worksheet.write(2,2, 'New Rev',bold)
     # worksheet.write(4,3, 'Changed Component',bold)
@@ -113,7 +115,7 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
     response = requests.get('https://fa-evbp-saasfaprod1.fa.ocs.oraclecloud.com/fscmRestApi/resources/11.13.18.05/productChangeOrdersV2', auth=auth,params=params, verify=False)
     response_json =  response.json()
     affected_object_link = response_json['items'][0]['links'][2]['href']
-    response_affected = requests.get(affected_object_link,auth=auth, verify=False)
+    response_affected = requests.get(affected_object_link,auth=auth, verify=False,params={'limit':1000})
     response_affected_json = response_affected.json()
     
     num_of_items = len(response_affected_json['items'])
@@ -154,18 +156,19 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
             structure_affected_item = structure_affected_item.json()
             if len(structure_affected_item['items']) != 0:
                 component_link = structure_affected_item['items'][0]['links'][6]['href']
-                component_response = requests.get(component_link, auth=auth, verify=False)
+                component_response = requests.get(component_link, auth=auth, verify=False,params={'limit':1000})
                 component_response = component_response.json()
                 where_used_link = -1
                 for item in component_response['items']:
                     if item['ComponentItemNumber'][0:2] != '45':
                             where_used_link = item['links'][15]['href']
-                            break
-                    affected_items_components.add(item['ComponentItemNumber'])
+                            affected_items_components.add(item['ComponentItemNumber'])
+                            continue
                 if affected_items_components != set():
                     non_production_components = check_lifecycle_status(affected_items_components,auth,0)
                     for item in non_production_components:
                         worksheet.write(i,0,f"Item {item[0]} (kid of {affected_item['ItemNumber']}) is in {item[1]} lifecycle stage")
+                        worksheet.write(i,1,item[0])
                         i+=1
         
             
@@ -185,6 +188,7 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
 
     for item in non_production_parents:
         worksheet.write(i,0,f"Item {item[2]} (parent of {item[0]}) is in {item[1]} lifecycle stage")
+        worksheet.write(i,1,item[2])
         i+=1
 
 
@@ -192,6 +196,7 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
 
     for item in non_production_selves:
         worksheet.write(i,0,f"Item {item[0]} is in {item[1]} lifecycle stage")
+        worksheet.write(i,1,item[0])
         i+=1
     pass
 
@@ -205,15 +210,17 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
 
     for item in same_revision_updates:
         worksheet.write(i,0,f"Item {item[0]} already exists in {item[1]} at the same revision ({item[2]})")
-        same_revision_updates
+        worksheet.write(i,1,item[0])
         i+=1
 
     for item in parents_matched_with_active_ECO:
         worksheet.write(i,0,f"Item {item[0]} has a parent {item[1]} that exists in {item[2]}")
+        worksheet.write(i,1,item[0])
         i+=1
 
     for item in kids_matched_with_active_ECO:
         worksheet.write(i,0,f"Item {item[0]} has a kid {item[1]} that exists in {item[2]}")
+        worksheet.write(i,1,item[0])
         i+=1
     
     pb['value'] = 100
