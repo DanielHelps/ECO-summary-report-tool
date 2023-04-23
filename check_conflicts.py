@@ -20,7 +20,7 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
         items_LOVs = requests.get(request_link,params=lifecycle_params,auth=auth, verify=False)
         items_LOVs = items_LOVs.json()
         for item in items_LOVs['items']:
-            if item['CurrentPhaseCode'] != 'Production':
+            if item['CurrentPhaseCode'] != 'Production' and item['ItemNumber'] in items_list:
                 if parents_flag == 0:
                     non_production_items.append((item['ItemNumber'],item['CurrentPhaseCode']))
                 else:
@@ -34,7 +34,20 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
         
         return non_production_items
 
-            
+    def get_only_latest_not_disabled(items):
+        # sorted_BOM = sorted(items, key=lambda i: i["StartDateTime"], reverse=True)
+        items.reverse()
+        assembly_BOM = []
+        assembly_BOM_components_names = []
+        for component in items:
+            if component['ComponentItemNumber'] not in assembly_BOM_components_names and component['ACDTypeValue'] != 'Disabled':
+                assembly_BOM.append(component)
+            assembly_BOM_components_names.append(component['ComponentItemNumber'])
+
+                
+        
+        return assembly_BOM
+        
 
 
     # username = "daniel.marom@kornit.com"
@@ -56,7 +69,8 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
     # params_except_ECO = {'q':f"StatusTypeValue=Interim approval", 'limit':1000, 'expand':'all'} #WRONG ONE!!!!!!!!!!!!!!!!!!!!!!!!!!!
     all_ECOs_link = "https://fa-evbp-saasfaprod1.fa.ocs.oraclecloud.com/fscmRestApi/resources/11.13.18.05/productChangeOrdersV2"
     response = requests.get(all_ECOs_link, auth=auth,params=params_except_ECO, verify=False)
-
+    if response.status_code == 401:
+        return 401
     
     # print(response.status_code)
     
@@ -159,12 +173,15 @@ def create_conflict_report(username, password, ECO, pb, value_text, root):
                 component_response = requests.get(component_link, auth=auth, verify=False,params={'limit':1000})
                 component_response = component_response.json()
                 where_used_link = -1
-                for item in component_response['items']:
-                    if item['ComponentItemNumber'][0:2] != '45':
-                            where_used_link = item['links'][15]['href']
-                            affected_items_components.add(item['ComponentItemNumber'])
-                            continue
+                # sorted_components = sorted(component_response['items'], key=lambda i: i["StartDateTime"], reverse=True)
+                components_updated = get_only_latest_not_disabled(component_response['items'])
+                for item in components_updated:
+                    where_used_link = item['links'][15]['href']
+                    affected_items_components.add(item['ComponentItemNumber'])
+                    continue
                 if affected_items_components != set():
+                    if affected_item['ItemNumber']=='33-PNEM-0048':
+                        pass
                     non_production_components = check_lifecycle_status(affected_items_components,auth,0)
                     for item in non_production_components:
                         worksheet.write(i,0,f"Item {item[0]} (kid of {affected_item['ItemNumber']}) is in {item[1]} lifecycle stage")
