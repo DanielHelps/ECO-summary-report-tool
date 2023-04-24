@@ -73,7 +73,7 @@ urllib3.disable_warnings()
 root = tk.Tk()
 root.geometry('420x300')
 root.resizable(False, False)
-Version = '3.3'
+Version = '3.6'
 root.title(f'ECO summary report tool V{Version}')
 title_font = ("Helvetica", 16)
 regular_font = ("Helvetica", 12)

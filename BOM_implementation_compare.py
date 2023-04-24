@@ -7,17 +7,25 @@ def create_BOM_Implementation_report(username, password, ECO, pb, value_text, ro
     import xlsxwriter
     import openpyxl
     import re
+    from more_itertools import locate
 
-    def get_only_latest(items):
-        assembly_BOM_duplicates = sorted(items, key=lambda i: i["StartDateTime"], reverse=True)
+    def get_only_latest(items,ECO):
+        items.reverse()
+        min_ECO_loc = min(list(locate(items, lambda x: x['ChangeNotice'] == ECO)))
+        max_ECO_loc = max(list(locate(items, lambda x: x['ChangeNotice'] == ECO)))
+        items[min_ECO_loc:max_ECO_loc+1] = items[min_ECO_loc:max_ECO_loc+1][::-1]
+
+        # assembly_BOM_duplicates = sorted(items, key=lambda i: i["StartDateTime"], reverse=True)
+        checked_items = []
         assembly_BOM = []
-        for component in assembly_BOM_duplicates:
-            if component['ComponentItemNumber'] not in [x[0] for x in assembly_BOM] and component['EndDateTime'] == None:
+        for component in items:
+            if component['ComponentItemNumber'] not in checked_items and component['ACDTypeValue'] != 'Disabled':
                 assembly_BOM.append(tuple((component['ComponentItemNumber'],component['Quantity'])))
+            checked_items.append(component['ComponentItemNumber'])
         
         return assembly_BOM
         
-    def get_latest_BOM(ItemNumber):
+    def get_latest_BOM(ItemNumber,ECO):
         params = {'q':f'ItemNumber={ItemNumber}'}
         response = requests.get('https://fa-evbp-saasfaprod1.fa.ocs.oraclecloud.com:443/fscmRestApi/resources/11.13.18.05/itemStructures', auth=auth,params=params,verify=False)
         if response.status_code == 401:
@@ -31,7 +39,7 @@ def create_BOM_Implementation_report(username, password, ECO, pb, value_text, ro
 
         assembly_BOM_response = requests.get(assembly_BOM_link, auth=auth,params={'limit':1000},verify=False)
         assembly_BOM_response = assembly_BOM_response.json()
-        assembly_BOM = get_only_latest(assembly_BOM_response['items'])
+        assembly_BOM = get_only_latest(assembly_BOM_response['items'],ECO)
         # assembly_BOM_duplicates = sorted(assembly_BOM_response['items'], key=lambda i: i["StartDateTime"], reverse=True)
         # assembly_BOM = []
         # for component in assembly_BOM_duplicates:
@@ -40,6 +48,21 @@ def create_BOM_Implementation_report(username, password, ECO, pb, value_text, ro
         
         return assembly_BOM
         
+    def write_to_report(i, assembly, drawing, changed_item, old_qty, new_qty,delta, change_type, unit_column, df, comp_row, file_name):
+        color = green if new_qty > old_qty else red
+        worksheet.write(i,0,assembly,purple)
+        if drawing:
+            worksheet.write(i,1,drawing[0],purple)
+        worksheet.write(i,2,changed_item,color)
+        worksheet.write(i,3,old_qty,color)
+        worksheet.write(i,4,new_qty,color)
+        worksheet.write(i,5,delta,color)
+        worksheet.write(i,6,change_type,color)
+        if unit_column !=-1:
+            worksheet.write(i,7,df.iloc[comp_row,unit_column],color)
+        if re.findall("[A-Z]\d",file_name.split('.')[0][-2:]):
+            worksheet.write(i,8,file_name.split('.')[0][-2:],color)
+
 
     # urllib3.disable_warnings()
     # username = 'daniel.marom@kornit.com'
@@ -63,20 +86,23 @@ def create_BOM_Implementation_report(username, password, ECO, pb, value_text, ro
     worksheet.write(0,0, f'{ECO} BOM Implementation Report',bold)
         
     worksheet.write(2,0, 'Assembly number',bold)
-    worksheet.write(2,1, 'Changed item',bold)
-    worksheet.write(2,2, 'Old qty',bold)
-    worksheet.write(2,3, 'New qty',bold)
-    worksheet.write(2,4, 'Qty change',bold)
-    worksheet.write(2,5, 'Change type',bold)
-    worksheet.write(2,6, 'Units',bold)
+    worksheet.write(2,1, 'Drawing number',bold)
+    worksheet.write(2,2, 'Changed item',bold)
+    worksheet.write(2,3, 'Old qty',bold)
+    worksheet.write(2,4, 'New qty',bold)
+    worksheet.write(2,5, 'Qty change',bold)
+    worksheet.write(2,6, 'Change type',bold)
+    worksheet.write(2,7, 'Units',bold)
 
     worksheet.set_column(0, 0, 16.71)
-    worksheet.set_column(1, 1, 13.86)
-    worksheet.set_column(2, 2, 6.71)
-    worksheet.set_column(3, 3, 7.71)
-    worksheet.set_column(3, 3, 14)
-    worksheet.set_column(4, 4, 10.14)
-    worksheet.set_column(5, 5, 11.29)
+    worksheet.set_column(1, 1, 15.14)
+    worksheet.set_column(2, 2, 14)
+    worksheet.set_column(3, 3, 6.71)
+    worksheet.set_column(4, 4, 7.71)
+    worksheet.set_column(5, 5, 10.14)
+    worksheet.set_column(6, 6, 11.29)
+    worksheet.set_column(7, 7, 7.29)
+    
     
     i=3
     # worksheet.write(4,3, 'Changed Component',bold)
@@ -96,10 +122,11 @@ def create_BOM_Implementation_report(username, password, ECO, pb, value_text, ro
             excel_PN = re.findall("\d\d-[A-Z][A-Z][A-Z][A-Z]-\d\d\d\d\d",item)
             if not excel_PN:
                 excel_PN = re.findall("\d\d-[A-Z][A-Z][A-Z][A-Z]-\d\d\d\d",item)
+            excel_drawing_number= re.findall("\d\d\d-\d\d-\d\d-\d\d\d",item)
             if excel_PN and 'xls' in item[-4:]:
                 if excel_PN[0][0:2] in check_assemblies:
                     df = pd.read_excel(dir + "\\" + item)
-                    assembly_BOM = get_latest_BOM(excel_PN[0])
+                    assembly_BOM = get_latest_BOM(excel_PN[0],ECO)
                     if assembly_BOM == 401:
                         return 401
                     PN_column = -1
@@ -117,67 +144,88 @@ def create_BOM_Implementation_report(username, password, ECO, pb, value_text, ro
                         if component[0] in [x[0] for x in assembly_BOM]:
                             item_index = [x[0] for x in assembly_BOM].index(component[0])
                             component_delta = component[1]-assembly_BOM[item_index][1]
-                            if component_delta > 0:
+                            if component_delta != 0:
                                 was_written.append(excel_PN[0])
-                                if excel_PN[0] in left_to_write:
-                                    left_to_write.remove(excel_PN[0])
-                                worksheet.write(i,0,excel_PN[0],purple)
-                                worksheet.write(i,1,component[0],green)
-                                worksheet.write(i,2,assembly_BOM[item_index][1],green)
-                                worksheet.write(i,3,component[1],green)
-                                worksheet.write(i,4,component_delta,green)
-                                worksheet.write(i,5,"Updated",green)
-                                if unit_column !=-1:
-                                    worksheet.write(i,6,df.iloc[comp_row,unit_column],green)
+                                if (excel_PN[0],excel_drawing_number) in left_to_write:
+                                    left_to_write.remove(tuple((excel_PN[0],excel_drawing_number)))
+                                write_to_report(i,excel_PN[0],excel_drawing_number,component[0],assembly_BOM[item_index][1],component[1],component_delta,"Updated",unit_column,df,comp_row,item)
                                 i+=1
+                                # worksheet.write(i,0,excel_PN[0],purple)
+                                # if excel_drawing_number:
+                                #     worksheet.write(i,1,excel_drawing_number[0],purple)
+                                # worksheet.write(i,2,component[0],green)
+                                # worksheet.write(i,3,assembly_BOM[item_index][1],green)
+                                # worksheet.write(i,4,component[1],green)
+                                # worksheet.write(i,5,component_delta,green)
+                                # worksheet.write(i,6,"Updated",green)
+                                # if unit_column !=-1:
+                                #     worksheet.write(i,7,df.iloc[comp_row,unit_column],green)
+                                # i+=1
+                                # if re.findall("[A-Z]\d",item.split('.')[0][-2:]):
+                                #     worksheet.write(i,8,item.split('.')[0][-2:],green)
                                 # BOM_delta.append(tuple((component[0],component_delta)))
-                            elif component_delta < 0:
-                                was_written.append(excel_PN[0])
-                                if excel_PN[0] in left_to_write:
-                                    left_to_write.remove(excel_PN[0])
-                                worksheet.write(i,0,excel_PN[0],purple)
-                                worksheet.write(i,1,component[0],red)
-                                worksheet.write(i,2,assembly_BOM[item_index][1],red)
-                                worksheet.write(i,3,component[1],red)
-                                worksheet.write(i,4,component_delta,red)
-                                worksheet.write(i,5,"Updated",red)
-                                if unit_column !=-1:
-                                    worksheet.write(i,6,df.iloc[comp_row,unit_column],red)
-                                i+=1
+                            # elif component_delta < 0:
+                            #     was_written.append(excel_PN[0])
+                            #     if (excel_PN[0],excel_drawing_number) in left_to_write:
+                            #         left_to_write.remove(tuple((excel_PN[0],excel_drawing_number)))
+                            #     write_to_report(i,excel_PN[0],excel_drawing_number,component[0],assembly_BOM[item_index][1],component[1],component_delta,"Updated",unit_column,red,df,comp_row,item)
+                            #     worksheet.write(i,0,excel_PN[0],purple)
+                            #     if excel_drawing_number:
+                            #         worksheet.write(i,1,excel_drawing_number[0],purple)
+                            #     worksheet.write(i,2,component[0],red)
+                            #     worksheet.write(i,3,assembly_BOM[item_index][1],red)
+                            #     worksheet.write(i,4,component[1],red)
+                            #     worksheet.write(i,5,component_delta,red)
+                            #     worksheet.write(i,6,"Updated",red)
+                            #     if unit_column !=-1:
+                            #         worksheet.write(i,7,df.iloc[comp_row,unit_column],red)
+                            #     if re.findall("[A-Z]\d",item.split('.')[0][-2:]):
+                            #         worksheet.write(i,8,item.split('.')[0][-2:],red)
+                            #     i+=1
                         else:
                             was_written.append(excel_PN[0])
-                            if excel_PN[0] in left_to_write:
-                                left_to_write.remove(excel_PN[0])
-                            worksheet.write(i,0,excel_PN[0],purple)
-                            worksheet.write(i,1,component[0],green)
-                            worksheet.write(i,2,0,green)
-                            worksheet.write(i,3,component[1],green)
-                            worksheet.write(i,4,component[1],green)
-                            worksheet.write(i,5,"Added",green)
-                            if unit_column !=-1:
-                                worksheet.write(i,6,df.iloc[comp_row,unit_column],green)
+                            if (excel_PN[0],excel_drawing_number) in left_to_write:
+                                left_to_write.remove(tuple((excel_PN[0],excel_drawing_number)))
+                            write_to_report(i,excel_PN[0],excel_drawing_number,component[0],0,component[1],component[1],"Added",unit_column,df,comp_row,item)
+                            # worksheet.write(i,0,excel_PN[0],purple)
+                            # if excel_drawing_number:
+                            #     worksheet.write(i,1,excel_drawing_number[0],purple)
+                            # worksheet.write(i,2,component[0],green)
+                            # worksheet.write(i,3,0,green)
+                            # worksheet.write(i,4,component[1],green)
+                            # worksheet.write(i,5,component[1],green)
+                            # worksheet.write(i,6,"Added",green)
+                            # if unit_column !=-1:
+                            #     worksheet.write(i,7,df.iloc[comp_row,unit_column],green)
+                            # if re.findall("[A-Z]\d",item.split('.')[0][-2:]):
+                            #     worksheet.write(i,8,item.split('.')[0][-2:],green)
                             i+=1
                             # BOM_delta.append(tuple((component[0],component[1])))
                             
                     for comp_row, component in enumerate(assembly_BOM):
-                        if component[0] not in [x[0] for x in NEW_BOM]:
+                        if component[0] not in [x[0] for x in NEW_BOM]:                            
                             was_written.append(excel_PN[0])
-                            if excel_PN[0] in left_to_write:
-                                left_to_write.remove(excel_PN[0])
-                            worksheet.write(i,0,excel_PN[0],purple)
-                            worksheet.write(i,1,component[0],red)
-                            worksheet.write(i,2,component[1],red)
-                            worksheet.write(i,3,0,red)
-                            worksheet.write(i,4,-component[1],red)
-                            worksheet.write(i,5,"Removed",red)
-                            if unit_column !=-1:
-                                worksheet.write(i,6,df.iloc[comp_row,unit_column],red)
+                            if (excel_PN[0],excel_drawing_number) in left_to_write:
+                                left_to_write.remove(tuple((excel_PN[0],excel_drawing_number)))
+                            write_to_report(i,excel_PN[0],excel_drawing_number,component[0],component[1],0,-component[1],"Removed",unit_column,df,comp_row,item)
+                            # worksheet.write(i,0,excel_PN[0],purple)
+                            # if excel_drawing_number:
+                            #         worksheet.write(i,1,excel_drawing_number[0],purple)
+                            # worksheet.write(i,2,component[0],red)
+                            # worksheet.write(i,3,component[1],red)
+                            # worksheet.write(i,4,0,red)
+                            # worksheet.write(i,5,-component[1],red)
+                            # worksheet.write(i,6,"Removed",red)
+                            # if unit_column !=-1:
+                            #     worksheet.write(i,7,df.iloc[comp_row,unit_column],red)
+                            # if re.findall("[A-Z]\d",item.split('.')[0][-2:]):
+                            #     worksheet.write(i,8,item.split('.')[0][-2:],red)
                             i+=1
                             # BOM_delta.append(tuple((component[0],-component[1])))
                     
                     # In cases where first file is not xls
                     if excel_PN[0] not in was_written:
-                        left_to_write.append(excel_PN[0])
+                        left_to_write.append(tuple((excel_PN[0],excel_drawing_number)))
                         was_written.append(excel_PN[0])
                     # print(excel_PN[0])
                     # print(BOM_delta)
@@ -187,7 +235,7 @@ def create_BOM_Implementation_report(username, password, ECO, pb, value_text, ro
                     root.update()
                     continue
             elif excel_PN and excel_PN[0] not in was_written:
-                left_to_write.append(excel_PN[0])
+                left_to_write.append(tuple((excel_PN[0],excel_drawing_number)))
                 was_written.append(excel_PN[0])
         except:
             worksheet.write(i,0,f"ERROR with item {item}",error_font)
@@ -215,7 +263,9 @@ def create_BOM_Implementation_report(username, password, ECO, pb, value_text, ro
         root.update()
 
     for item_left in left_to_write:
-        worksheet.write(i,0,item_left,gray)
+        worksheet.write(i,0,item_left[0],gray)
+        if item_left[1]:
+            worksheet.write(i,1,item_left[1][0],gray)
         i+=1
     workbook.close()
     return f'{ECO}_BOM_Implementation_Report.xlsx' 
